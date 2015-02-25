@@ -33,7 +33,9 @@ DEALINGS IN THE SOFTWARE.  */
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include "htslib/hts.h"
 #include "htslib/bgzf.h"
+#include "htslib/tbx.h"
 
 static void usage(FILE *fp, int status)
 {
@@ -45,23 +47,34 @@ static void usage(FILE *fp, int status)
 
 int main(int argc, char **argv)
 {
-    BGZF *fp;
+    htsFile *fp;
     
     if (argc == 1) usage(stderr, EXIT_FAILURE);;
     
     int status = EXIT_SUCCESS;
     for ( ; optind < argc; optind++) {
-        fp = bgzf_open(argv[optind], "r");
+        fp = hts_open(argv[optind], "r");
+        
         if (fp == NULL) {
             fprintf(stderr, "[bgzeof] Could not open file: \"%s\": %s\n", argv[optind], strerror(errno));
             status = EXIT_FAILURE;
             continue;
         }
-        if (bgzf_check_EOF(fp) == 0) {
-            fprintf(stderr, "[bgzeof] %s: BGZF EOF marker is absent. File may be truncated or not a BGZF compressed file.\n", argv[optind]);
+        
+        if ( fp->format.compression==bgzf )
+        {
+            BGZF *bgzf = hts_get_bgzfp(fp);
+            if ( bgzf && bgzf_check_EOF(bgzf) == 0 ) {
+                fprintf(stderr, "[bgzeof] %s: BGZF EOF marker is absent. File may be truncated or not a BGZF compressed file.\n", argv[optind]);
+                status = EXIT_FAILURE;
+            }
+        }
+        else
+        {
+            fprintf(stderr, "[bgzeof] %s: Not a BGZF compressed file.\n", argv[optind]);
             status = EXIT_FAILURE;
         }
-        bgzf_close(fp);
+        hts_close(fp);
     }
     
     return status;
